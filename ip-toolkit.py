@@ -31,7 +31,7 @@ import tkinter.font as tkfont
 import customtkinter as ctk
 
 APP_TITLE = "IP Toolkit"
-VERSION = "0.7.0 (alpha release)"
+VERSION = "0.8.0 (alpha release)"
 GITHUB_URL = "https://github.com/confignomad/ip-toolkit"
 
 # Above this size, the IPv6 Calculator adds a note explaining that it reports
@@ -50,6 +50,18 @@ BASE_DPI = 96
 MIN_SCALING, MAX_SCALING = 1.0, 3.0
 # Override autodetection, e.g. IP_TOOLKIT_SCALING=1.5
 SCALING_ENV_VAR = "IP_TOOLKIT_SCALING"
+
+# The output box opens big enough for this much text. Every tool's output fits
+# in OUTPUT_COLS; OUTPUT_ROWS covers all but the two longest (the embeddings
+# list and a 100-address generator run), which scroll.
+OUTPUT_COLS = 74
+OUTPUT_ROWS = 30
+# Output font size in CTk units.
+OUTPUT_FONT_SIZE = 13
+# Ctrl +/- multiplies the detected display scaling by this much per press,
+# within these bounds. 1.0 is whatever the display called for.
+UI_ZOOM_STEP = 0.1
+UI_ZOOM_MIN, UI_ZOOM_MAX = 0.6, 2.0
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -348,10 +360,13 @@ class IPToolkitApp(ctk.CTk):
         if scaling is not None:
             ctk.set_widget_scaling(scaling)
             ctk.set_window_scaling(scaling)
+        # Ctrl +/- multiplies this; 1.0 on Windows/macOS, where CustomTkinter
+        # applies its own DPI factor underneath whatever we set.
+        self._base_scaling = scaling if scaling is not None else 1.0
+        self._zoom = 1.0
         self._mono_family = pick_mono_family(self)
 
         self.title(APP_TITLE)
-        self.geometry("660x520")
         self.minsize(580, 460)
 
         # name -> builder method that populates the input frame (alphabetical)
@@ -367,7 +382,9 @@ class IPToolkitApp(ctk.CTk):
 
         self._build_menu()
         self._build_widgets()
+        self._bind_zoom()
         self.select_tool("IPv6 Calculator")
+        self._fit_to_content()
 
     # ---- Menus ----
     def _build_menu(self):
@@ -402,10 +419,71 @@ class IPToolkitApp(ctk.CTk):
         self.input_frame = ctk.CTkFrame(self)
         self.input_frame.pack(fill="x", padx=20, pady=6)
 
-        self.output = ctk.CTkTextbox(
-            self, font=ctk.CTkFont(family=self._mono_family, size=13))
+        self._output_font = ctk.CTkFont(family=self._mono_family,
+                                        size=OUTPUT_FONT_SIZE)
+        self.output = ctk.CTkTextbox(self, font=self._output_font)
         self.output.pack(fill="both", expand=True, padx=20, pady=(8, 16))
         self.output.configure(state="disabled")
+
+    # ---- UI zoom (Ctrl +/-, Ctrl+0) ----
+    def _bind_zoom(self):
+        # bind_all so the shortcut works wherever focus happens to be. Ctrl+=
+        # is included because "+" needs Shift on most layouts.
+        for seq in ("<Control-plus>", "<Control-equal>", "<Control-KP_Add>"):
+            self.bind_all(seq, lambda _e: self._zoom_ui(+1))
+        for seq in ("<Control-minus>", "<Control-KP_Subtract>"):
+            self.bind_all(seq, lambda _e: self._zoom_ui(-1))
+        for seq in ("<Control-0>", "<Control-KP_0>"):
+            self.bind_all(seq, lambda _e: self._zoom_ui(None))
+
+    def _zoom_ui(self, step):
+        """Zoom the whole UI, or reset to the detected scaling when None.
+
+        Zooming only the output font left the entries, labels and buttons
+        behind, so this multiplies the display scaling instead: fonts, widget
+        heights and padding all move together.
+        """
+        if step is None:
+            self._zoom = 1.0
+        else:
+            self._zoom = round(
+                max(UI_ZOOM_MIN, min(self._zoom + step * UI_ZOOM_STEP,
+                                     UI_ZOOM_MAX)), 2)
+        factor = self._base_scaling * self._zoom
+        ctk.set_widget_scaling(factor)
+        ctk.set_window_scaling(factor)
+        self._fit_to_content()
+        return "break"
+
+    # ---- Window sizing ----
+    def _fit_to_content(self):
+        """Open wide enough for OUTPUT_COLS x OUTPUT_ROWS of output text.
+
+        The old fixed 660x520 was narrower than the widest output at any
+        scaling, so long lines always wrapped. Measure the real font instead.
+        """
+        self.update_idletasks()
+        font = tkfont.Font(root=self, font=self.output._textbox.cget("font"))
+        # Everything that is not the text area: padding, borders, scrollbar.
+        chrome_w = self.winfo_width() - self.output.winfo_width()
+        chrome_h = self.winfo_height() - self.output.winfo_height()
+        want_w = OUTPUT_COLS * font.measure("0") + chrome_w
+        want_h = OUTPUT_ROWS * font.metrics("linespace") + chrome_h
+
+        # Never open larger than the display it has to sit on.
+        want_w = min(want_w, int(self.winfo_screenwidth() * 0.9))
+        want_h = min(want_h, int(self.winfo_screenheight() * 0.9))
+
+        # After a scaling change CustomTkinter pins minsize == maxsize to the
+        # current size for one second to force the new scale through, which
+        # blocks this resize. Lift the pin; CustomTkinter restores its own
+        # min/max when that timer fires.
+        tk.Tk.minsize(self, 1, 1)
+        tk.Tk.maxsize(self, self.winfo_screenwidth(), self.winfo_screenheight())
+
+        # geometry() re-applies scaling, so hand it unscaled numbers back.
+        scale = ctk.ScalingTracker.get_window_scaling(self)
+        self.geometry(f"{round(want_w / scale)}x{round(want_h / scale)}")
 
     def select_tool(self, name):
         self.tool_label.configure(text=name)
@@ -481,8 +559,11 @@ class IPToolkitApp(ctk.CTk):
             f"Exploded        : {r['exploded']}",
         ]
         if big > BIG_NETWORK_THRESHOLD:
-            lines += ["", f"(Guard rail: {big:,} addresses. This tool never lists "
-                          "addresses -- it reports first, last and the total only.)"]
+            # The count is already on the "Total addresses" line above; repeating
+            # it here pushed this note past 130 characters on a large prefix.
+            lines += ["",
+                      "(Guard rail: far too many addresses to list. This tool",
+                      "reports first, last and the total only; it never enumerates.)"]
         self._set_output("\n".join(lines))
 
     # ---- Tool: Random Address Generator ----
@@ -674,13 +755,25 @@ class IPToolkitApp(ctk.CTk):
             "Developed and designed by Ron Staples."
         )
 
+    @staticmethod
+    def _library_lines():
+        """Aligned 'name - purpose' lines; the version length varies."""
+        libs = [
+            (f"customtkinter {ctk.__version__}", "GUI, dark theme, scaling"),
+            ("ipaddress (stdlib)", "IPv4/IPv6 address math"),
+            ("random (stdlib)", "random address generation"),
+            ("tkinter (stdlib)", "menu bar, right-click menus"),
+            ("tkinter.font (stdlib)", "font metrics for window sizing"),
+            ("os (stdlib)", "IP_TOOLKIT_SCALING override"),
+            ("sys (stdlib)", "platform detection"),
+        ]
+        width = max(len(name) for name, _ in libs)
+        return "\n".join(f"  {name:<{width}}  - {purpose}"
+                         for name, purpose in libs)
+
     def show_libraries_text(self):
         self._set_output(
-            "Python Libraries used:\n\n"
-            f"  customtkinter {ctk.__version__}  - GUI (dark mode)\n"
-            "  ipaddress (stdlib)     - IPv4/IPv6 math\n"
-            "  random (stdlib)        - random address generation\n"
-            "  tkinter (stdlib)       - menu bar"
+            "Python Libraries used:\n\n" + self._library_lines()
         )
 
     def show_github_text(self):

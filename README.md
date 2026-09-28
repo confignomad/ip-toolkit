@@ -1,6 +1,6 @@
 # IP Toolkit
 
-> **Version 0.7.0 (alpha)**
+> **Version 0.8.0 (alpha)**
 
 A dark-themed desktop app bundling seven small **IPv6 / IPv4 networking tools** into
 one window — subnet math, random address generation, conversions, and IPv4-in-IPv6
@@ -93,6 +93,26 @@ The output box also picks the first monospace family actually installed (Consola
 Cascadia Mono, Menlo, DejaVu Sans Mono, Liberation Mono, Noto Sans Mono, Courier New)
 rather than asking for Consolas and letting Tk substitute silently.
 
+### Window size
+
+The window measures the output font at startup and opens wide enough for 74 columns
+— the widest line any tool produces — and 30 rows, capped at 90% of the screen. The
+old fixed `660x520` was narrower than the widest output at *every* scaling, so long
+lines always wrapped; the size now follows the font instead of the other way round.
+
+### Zooming
+
+| Shortcut | Effect |
+|----------|--------|
+| **Ctrl +** (or **Ctrl =**) | Larger |
+| **Ctrl −** | Smaller |
+| **Ctrl 0** | Back to the detected scaling |
+
+Zoom multiplies the display scaling rather than resizing one font, so the input
+fields, buttons, labels and output text all grow together and the window resizes to
+match. Each press is ±10%, within 0.6×–2.0× of the detected scaling; it resets on
+restart. Use `IP_TOOLKIT_SCALING` above to change the starting point permanently.
+
 ## Testing
 
 The address math lives in plain functions with no GUI code, so the suite runs
@@ -109,6 +129,8 @@ the mixed hex/dotted notation round-trip — plus every error path.
 ## Tips
 - Press **Enter** in any input field to run the current tool — no need to reach for
   the button. Every tool also has a **Clear** button that empties the output box.
+- **Ctrl +** / **Ctrl −** / **Ctrl 0** zoom the whole window — see
+  [Zooming](#zooming).
 - On **Windows and Linux**, every input field supports **Cut / Copy / Paste /
   Select All** via right-click, plus the usual Ctrl+X/C/V and Ctrl+A.
 - Use the **documentation** generator (`2001:db8::/32`, RFC 3849) for examples,
