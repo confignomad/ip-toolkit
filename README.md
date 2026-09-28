@@ -145,6 +145,5 @@ RFC 8200 (IPv6), 4291 (addressing), 5952 (text representation), 4193 (ULA),
 Developed and designed by **Ron Staples**.
 
 ## License
-No license is set yet. Until one is added, all rights are reserved — if you'd like
-others to reuse it, consider adding an [MIT](https://choosealicense.com/licenses/mit/)
-or similar license.
+[MIT](LICENSE) — free to use, modify and distribute, with attribution and no
+warranty.

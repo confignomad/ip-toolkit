@@ -421,7 +421,9 @@ class IPToolkitApp(ctk.CTk):
 
         self._output_font = ctk.CTkFont(family=self._mono_family,
                                         size=OUTPUT_FONT_SIZE)
-        self.output = ctk.CTkTextbox(self, font=self._output_font)
+        # wrap="word" so the prose notes fold at spaces; the default character
+        # wrap split words mid-token ("never l / ists").
+        self.output = ctk.CTkTextbox(self, font=self._output_font, wrap="word")
         self.output.pack(fill="both", expand=True, padx=20, pady=(8, 16))
         self.output.configure(state="disabled")
 
@@ -661,7 +663,7 @@ class IPToolkitApp(ctk.CTk):
             "    networks). This is the embedding that matters today.",
             "",
             "IPv4-mapped   (RFC 4291, sec. 2.5.5.2)",
-            f"    {r['mapped']}",
+            f"    {r['mapped']}   ( = ::ffff:{r['ipv4']} )",
             "    Used INSIDE a single dual-stack host: the sockets API uses it so",
             "    IPv6 code can accept IPv4 connections. Seen in logs; never routed.",
             "",
