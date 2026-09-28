@@ -67,6 +67,19 @@ pip install -r requirements.txt
 python ip-toolkit.py
 ```
 
+## Testing
+
+The address math lives in plain functions with no GUI code, so the suite runs
+headlessly (no display needed):
+
+```bash
+pytest
+```
+
+`tests/test_ip_toolkit.py` covers all seven tools' logic — subnet math, the
+`/31` and `/32` edge cases, generator ranges, the IPv4-in-IPv6 embeddings, and
+the mixed hex/dotted notation round-trip — plus every error path.
+
 ## Tips
 - Press **Enter** in any input field to run the current tool — no need to reach for
   the button. Every tool also has a **Clear** button that empties the output box.

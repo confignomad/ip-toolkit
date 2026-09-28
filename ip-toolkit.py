@@ -31,8 +31,9 @@ APP_TITLE = "IP Toolkit"
 VERSION = "0.7.0 (alpha release)"
 GITHUB_URL = "https://github.com/confignomad/ip-toolkit"
 
-# Only enumerate individual hosts when a network is this small or smaller.
-MAX_ENUMERATE = 1024
+# Above this size, the IPv6 Calculator adds a note explaining that it reports
+# first/last/total only. Nothing is ever enumerated, at any size.
+BIG_NETWORK_THRESHOLD = 1024
 # Cap on how many random addresses one click may generate.
 MAX_RANDOM = 100
 
@@ -272,7 +273,7 @@ def embed_ipv4_in_prefix(prefix_text, ipv4_text):
 # ----------------------------------------------------------------------------
 # GUI
 # ----------------------------------------------------------------------------
-class IPv6CalculatorApp(ctk.CTk):
+class IPToolkitApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
@@ -404,9 +405,9 @@ class IPv6CalculatorApp(ctk.CTk):
             f"Compressed      : {r['compressed']}",
             f"Exploded        : {r['exploded']}",
         ]
-        if big > MAX_ENUMERATE:
-            lines += ["", f"(Guard rail: {big:,} addresses -- too many to list; "
-                          "showing first/last only.)"]
+        if big > BIG_NETWORK_THRESHOLD:
+            lines += ["", f"(Guard rail: {big:,} addresses. This tool never lists "
+                          "addresses -- it reports first, last and the total only.)"]
         self._set_output("\n".join(lines))
 
     # ---- Tool: Random Address Generator ----
@@ -612,7 +613,7 @@ class IPv6CalculatorApp(ctk.CTk):
 
     def show_rfc_text(self):
         self._set_output(
-            "RFC References (IPv6):\n\n"
+            "RFC References:\n\n"
             "  RFC 8200 - Internet Protocol, Version 6 (IPv6) Specification\n"
             "  RFC 4291 - IPv6 Addressing Architecture\n"
             "  RFC 5952 - Recommendation for IPv6 Address Text Representation\n"
@@ -626,4 +627,4 @@ class IPv6CalculatorApp(ctk.CTk):
 
 
 if __name__ == "__main__":
-    IPv6CalculatorApp().mainloop()
+    IPToolkitApp().mainloop()
