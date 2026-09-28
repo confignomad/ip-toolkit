@@ -240,6 +240,64 @@ def test_embed_errors(prefix, ipv4, fragment):
     assert fragment in ipt.embed_ipv4_in_prefix(prefix, ipv4)["error"]
 
 
+# ---- Display scaling -------------------------------------------------------
+class FakeWindow:
+    """Stands in for a Tk window; only the DPI query is needed."""
+
+    def __init__(self, dpi):
+        self._dpi = dpi
+
+    def winfo_fpixels(self, _spec):
+        return self._dpi
+
+
+@pytest.fixture
+def linux(monkeypatch):
+    monkeypatch.setattr(ipt.sys, "platform", "linux")
+    monkeypatch.delenv(ipt.SCALING_ENV_VAR, raising=False)
+
+
+@pytest.mark.parametrize("dpi, expected", [
+    (96, None),        # standard DPI -- leave CustomTkinter alone
+    (72, None),        # below baseline -- never shrink
+    (144, 1.5),
+    (192, 2.0),
+    (960, 3.0),        # implausible DPI is clamped
+])
+def test_detect_scaling_from_dpi(linux, dpi, expected):
+    got = ipt.detect_scaling(FakeWindow(dpi))
+    if expected is None:
+        assert got is None
+    else:
+        assert got == pytest.approx(expected, abs=0.01)
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin"])
+def test_detect_scaling_defers_to_customtkinter(monkeypatch, platform):
+    monkeypatch.setattr(ipt.sys, "platform", platform)
+    monkeypatch.delenv(ipt.SCALING_ENV_VAR, raising=False)
+    assert ipt.detect_scaling(FakeWindow(192)) is None
+
+
+def test_env_var_overrides_detection(monkeypatch):
+    monkeypatch.setenv(ipt.SCALING_ENV_VAR, "1.25")
+    # Wins even on Windows, and without consulting the window at all.
+    monkeypatch.setattr(ipt.sys, "platform", "win32")
+    assert ipt.detect_scaling(None) == pytest.approx(1.25)
+
+
+@pytest.mark.parametrize("value, expected", [("0.1", 0.5), ("9", 4.0)])
+def test_env_var_is_clamped(monkeypatch, value, expected):
+    monkeypatch.setenv(ipt.SCALING_ENV_VAR, value)
+    assert ipt.detect_scaling(None) == pytest.approx(expected)
+
+
+def test_bad_env_var_falls_back_to_detection(linux, monkeypatch, capsys):
+    monkeypatch.setenv(ipt.SCALING_ENV_VAR, "huge")
+    assert ipt.detect_scaling(FakeWindow(144)) == pytest.approx(1.5, abs=0.01)
+    assert "Ignoring" in capsys.readouterr().err
+
+
 # ---- Mixed-notation helper -------------------------------------------------
 @pytest.mark.parametrize("addr", [
     "fd2b:1a9c:7e3f::ac1f:1001",

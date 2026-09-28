@@ -37,6 +37,9 @@ The app opens on the **IPv6 Calculator**.
 - **No pop-ups** — the `≡` menu (About / Python Libraries / GitHub / RFC References,
   plus Exit) prints into the shared output box.
 - **Teaches as it works** — e.g. the ULA generator explains why only `fd00::/8` is usable.
+- **HiDPI-aware on Linux** — CustomTkinter scales itself on Windows and macOS but not
+  on Linux, so the app detects the display DPI itself. See
+  [Display scaling](#display-scaling).
 
 ## Requirements
 
@@ -66,6 +69,29 @@ pip install -r requirements.txt
 # 4. Run
 python ip-toolkit.py
 ```
+
+## Display scaling
+
+CustomTkinter sizes its widgets in **pixels** and multiplies them by a DPI factor it
+detects per platform. It reads the real DPI on Windows and defers to the OS on macOS,
+but on Linux it hardcodes `1.0` (*"DPI awareness on Linux not implemented"*). On a
+HiDPI Linux screen that left every control at 1× while the OS-drawn menu bar scaled
+normally — the app looked tiny beside its own menu.
+
+IP Toolkit now works the factor out from the display's reported DPI (`DPI ÷ 96`) and
+applies it on Linux only, leaving Windows and macOS to CustomTkinter. Scaling is only
+ever increased, never reduced, so a standard 96 DPI display behaves exactly as before.
+
+If your display reports the wrong DPI — common when the desktop applies its own scale
+factor instead — override it:
+
+```bash
+IP_TOOLKIT_SCALING=1.5 python ip-toolkit.py   # 1.0 = unscaled; accepts 0.5–4.0
+```
+
+The output box also picks the first monospace family actually installed (Consolas,
+Cascadia Mono, Menlo, DejaVu Sans Mono, Liberation Mono, Noto Sans Mono, Courier New)
+rather than asking for Consolas and letting Tk substitute silently.
 
 ## Testing
 

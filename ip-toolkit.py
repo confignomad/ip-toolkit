@@ -22,8 +22,11 @@ Tools menu (alphabetical):
 """
 
 import ipaddress
+import os
 import random
+import sys
 import tkinter as tk
+import tkinter.font as tkfont
 
 import customtkinter as ctk
 
@@ -36,6 +39,17 @@ GITHUB_URL = "https://github.com/confignomad/ip-toolkit"
 BIG_NETWORK_THRESHOLD = 1024
 # Cap on how many random addresses one click may generate.
 MAX_RANDOM = 100
+
+# Monospace families to try for the output box, best first. Consolas is the
+# Windows default; the rest cover macOS and the common Linux distributions.
+MONO_FAMILIES = ("Consolas", "Cascadia Mono", "Menlo", "DejaVu Sans Mono",
+                 "Liberation Mono", "Noto Sans Mono", "Courier New")
+# 96 DPI is the 100%-scaling baseline both Windows and X11 work from.
+BASE_DPI = 96
+# Keep autodetected scaling sane if a display reports an implausible DPI.
+MIN_SCALING, MAX_SCALING = 1.0, 3.0
+# Override autodetection, e.g. IP_TOOLKIT_SCALING=1.5
+SCALING_ENV_VAR = "IP_TOOLKIT_SCALING"
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -271,11 +285,71 @@ def embed_ipv4_in_prefix(prefix_text, ipv4_text):
 
 
 # ----------------------------------------------------------------------------
+# Display scaling and fonts (platform quirks)
+# ----------------------------------------------------------------------------
+def detect_scaling(window):
+    """Widget scaling factor to use for this display, or None to leave as-is.
+
+    CustomTkinter sizes its fonts in pixels and multiplies them by a DPI
+    factor it detects per platform. It queries the real DPI on Windows and
+    relies on the OS on macOS, but on Linux it hardcodes 1.0 ("DPI awareness
+    on Linux not implemented"). On a HiDPI Linux screen that leaves every CTk
+    widget at 1x while the OS-drawn menu bar scales normally, so the app looks
+    tiny next to its own menu. Work the factor out from the reported DPI.
+
+    Returns None on Windows and macOS, where CustomTkinter already handles it.
+    """
+    override = os.environ.get(SCALING_ENV_VAR, "").strip()
+    if override:
+        try:
+            return max(0.5, min(float(override), 4.0))
+        except ValueError:
+            print(f"Ignoring {SCALING_ENV_VAR}={override!r}: not a number",
+                  file=sys.stderr)
+
+    if sys.platform == "darwin" or sys.platform.startswith("win"):
+        return None
+
+    try:
+        dpi = window.winfo_fpixels("1i")
+    except tk.TclError:
+        return None
+    if not dpi:
+        return None
+    scaling = dpi / BASE_DPI
+    if scaling <= MIN_SCALING:          # 96 DPI or lower -- nothing to do
+        return None
+    return min(scaling, MAX_SCALING)
+
+
+def pick_mono_family(window):
+    """First installed family from MONO_FAMILIES, else Tk's generic Courier.
+
+    Tk silently substitutes a missing family, so asking for Consolas on Linux
+    yields whatever the font system picks. Choosing explicitly keeps the
+    output box predictably monospaced.
+    """
+    available = set(tkfont.families(window))
+    for family in MONO_FAMILIES:
+        if family in available:
+            return family
+    return "Courier"
+
+
+# ----------------------------------------------------------------------------
 # GUI
 # ----------------------------------------------------------------------------
 class IPToolkitApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+
+        # Set scaling before geometry() so the window grows with the widgets.
+        scaling = detect_scaling(self)
+        if scaling is not None:
+            ctk.set_widget_scaling(scaling)
+            ctk.set_window_scaling(scaling)
+        self._mono_family = pick_mono_family(self)
+
         self.title(APP_TITLE)
         self.geometry("660x520")
         self.minsize(580, 460)
@@ -328,7 +402,8 @@ class IPToolkitApp(ctk.CTk):
         self.input_frame = ctk.CTkFrame(self)
         self.input_frame.pack(fill="x", padx=20, pady=6)
 
-        self.output = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Consolas", size=13))
+        self.output = ctk.CTkTextbox(
+            self, font=ctk.CTkFont(family=self._mono_family, size=13))
         self.output.pack(fill="both", expand=True, padx=20, pady=(8, 16))
         self.output.configure(state="disabled")
 
